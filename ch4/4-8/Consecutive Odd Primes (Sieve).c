@@ -28,8 +28,9 @@ int main(int argc, char* argv[]) {
     // only check **odd** numbers in [3, N], and its size is M
     const int M = N % 2 == 0 ? (N - 4) / 2 + 1 : (N - 3) / 2 + 1;
     int checkStart = 3 + 2 * BLOCK_LOW(rank, np, M);
-    int checkEnd = 3 + 2 * BLOCK_HIGH(rank, np, M);
-    int checkSize = BLOCK_SIZE(rank, np, M);
+    // Check additional odd number to avoid inter-process communication
+    int checkEnd = 3 + 2 * BLOCK_HIGH(rank, np, M) + 2;
+    int checkSize = BLOCK_SIZE(rank, np, M) + 1;
 
     // All primes should be in processor 0
     int proc0Size = M / np;
@@ -96,20 +97,6 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i + 1 < checkSize; ++i) {
         if (!marked[i] && !marked[i + 1])
             // both 3+2*i and 3+2*(i+1) are prime
-            ++localCount;
-    }
-
-    if (rank != 0) {
-        MPI_Send(marked, 1, MPI_CHAR, rank - 1, 0, MPI_COMM_WORLD);
-    }
-
-    int firstMarkInNextProcess = 0;
-    if (rank != np - 1) {
-        MPI_Recv(&firstMarkInNextProcess, 1, MPI_CHAR, rank + 1, 0,
-                 MPI_COMM_WORLD, &status);
-        // check the last odd in this process
-        // and the first odd in the next process
-        if (!marked[checkSize - 1] && !firstMarkInNextProcess)
             ++localCount;
     }
 

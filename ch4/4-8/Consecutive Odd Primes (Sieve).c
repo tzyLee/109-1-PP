@@ -14,6 +14,7 @@
 int main(int argc, char* argv[]) {
     MPI_Init(&argc, &argv);
 
+    MPI_Status status;
     int rank, np;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &np);
@@ -48,7 +49,9 @@ int main(int argc, char* argv[]) {
     }
 
     memset(marked, 0, checkSize);
-
+    double elapsed_time = 0;
+    MPI_Barrier(MPI_COMM_WORLD);
+    elapsed_time += -MPI_Wtime();
     int prime = 3;
     int searchIndex = 0;  // search unmarked number from this index
     // Mark primes
@@ -90,17 +93,40 @@ int main(int argc, char* argv[]) {
 
     // Count primes
     int localCount = 0, count = 0;
-    for (int i = 0; i < checkSize; ++i) {
-        if (!marked[i])
+    for (int i = 0; i + 1 < checkSize; ++i) {
+        if (!marked[i] && !marked[i + 1])
+            // both 3+2*i and 3+2*(i+1) are prime
             ++localCount;
     }
-    MPI_Reduce(&localCount, &count, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
 
-    if (rank == 0) {
-        ++count;  // 2 is an even prime, not in [3, N]
-        printf("%d primes are less than or equal to %d\n", count, N);
+    if (rank != 0) {
+        MPI_Send(marked, 1, MPI_CHAR, rank - 1, 0, MPI_COMM_WORLD);
     }
 
+    int firstMarkInNextProcess = 0;
+    if (rank != np - 1) {
+        MPI_Recv(&firstMarkInNextProcess, 1, MPI_CHAR, rank + 1, 0,
+                 MPI_COMM_WORLD, &status);
+        // check the last odd in this process
+        // and the first odd in the next process
+        if (!marked[checkSize - 1] && !firstMarkInNextProcess)
+            ++localCount;
+    }
+
+    MPI_Reduce(&localCount, &count, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    elapsed_time += MPI_Wtime();
+
+    if (rank == 0) {
+        printf("Number of consecutive odd prime pairs less than %d: %d\n", N,
+               count);
+    }
+    if (np > 1 && rank == 1 || np == 1 && rank == 0) {
+        // print time on process 1 if possible
+        // (process 0 does not send to other)
+        printf("Time elapsed: %f, number of processes: %d\n", elapsed_time, np);
+    }
+
+    fflush(stdout);
     free(marked);
     MPI_Finalize();
     return 0;

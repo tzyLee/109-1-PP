@@ -85,6 +85,7 @@ int main(int argc, char* argv[]) {
         printf("%d primes are less than or equal to %d\n", count, N);
     }
 
+    free(marked);
     MPI_Finalize();
     return 0;
 }

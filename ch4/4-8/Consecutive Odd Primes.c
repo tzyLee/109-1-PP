@@ -11,6 +11,9 @@ int main(int argc, char *argv[]) {
     MPI_Init(&argc, &argv);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &np);
+    double elapsed_time = 0;
+    MPI_Barrier(MPI_COMM_WORLD);
+    elapsed_time += -MPI_Wtime();
 
     int count = 0;
     int localCount = 0;
@@ -22,8 +25,10 @@ int main(int argc, char *argv[]) {
     }
 
     MPI_Reduce(&localCount, &count, 1, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
+    elapsed_time += MPI_Wtime();
     if (rank == 0) {
         printf("Number of consecutive odd prime pairs: %d\n", count);
+        printf("Time elapsed: %f, number of processes: %d\n", elapsed_time, np);
     }
     fflush(stdout);
     MPI_Finalize();

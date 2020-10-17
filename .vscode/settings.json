@@ -1,0 +1,8 @@
+{
+    "C_Cpp.default.includePath": [
+        "/usr/include/x86_64-linux-gnu/mpich"
+    ],
+    "files.associations": {
+        "type_traits": "c"
+    }
+}

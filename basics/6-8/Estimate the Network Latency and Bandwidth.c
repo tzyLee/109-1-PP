@@ -8,7 +8,8 @@
 // mpiexec -n [NUMBER_OF_PROCESS] [EXECUTABLE_NAME]
 #define SAMPLE_SIZE 10000
 #define MESG_START 512
-#define BUFFER_SIZE 134217728
+#define BUFFER_SIZE 131072
+#define DELTA 1000
 
 int main(int argc, char *argv[]) {
     char buf[BUFFER_SIZE] = {0}, recv_buf[BUFFER_SIZE] = {0};
@@ -22,7 +23,8 @@ int main(int argc, char *argv[]) {
     if (rank == 0)
         memset(buf, 'a', BUFFER_SIZE);
 
-    for (int mesg_len = MESG_START; mesg_len <= BUFFER_SIZE; mesg_len *= 2) {
+    for (int mesg_len = MESG_START; mesg_len <= BUFFER_SIZE;
+         mesg_len += DELTA) {
         double elapsed_time = 0;
         for (int sample = 0; sample < SAMPLE_SIZE; ++sample) {
             MPI_Barrier(MPI_COMM_WORLD);

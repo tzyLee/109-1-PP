@@ -14,18 +14,23 @@ int main(int argc, char *argv[]) {
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &np);
 
+    double elapsed_time = 0;
+    MPI_Barrier(MPI_COMM_WORLD);
+    elapsed_time = -MPI_Wtime();
+
     double total_area = 0;
     double area = 0;
 
-    np *= 2;
-    for (int i = 2 * (rank + 1); i <= N; i += np)
+    for (int i = 2 * (rank + 1); i <= N; i += 2 * np)
         area += 4.0 * f(i - 1) + 2.0 * f(i);
 
     MPI_Reduce(&area, &total_area, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+    elapsed_time += MPI_Wtime();
     if (rank == 0) {
         total_area += f(0) - f(N);
         total_area /= 3.0 * N;
         printf("Approximation of pi: %13.11f\n", total_area);
+        printf("Time elapsed: %f, number of processes: %d\n", elapsed_time, np);
         fflush(stdout);
     }
     MPI_Finalize();

@@ -53,6 +53,7 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < len; ++i) {
             partialSum[i] += dividend / divisor;
             dividend %= divisor;
+            // divisor must <= LLONG_MAX/base, or dividend*base > LLONG_MAX
             dividend *= base;
         }
         // perform carrying

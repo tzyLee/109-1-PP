@@ -105,10 +105,10 @@ int main(int argc, char* argv[]) {
     int M = 0, N = 0;
     char* flattenedArray = NULL;
     char* recvBuffer = NULL;
+    readRowMajorMatrix("state", &flattenedArray, &M, &N, MPI_COMM_WORLD);
     if (rank == 0) {
         recvBuffer = malloc(BLOCK_SIZE(np - 1, np, M) * N * sizeof(char));
     }
-    readRowMajorMatrix("state", &flattenedArray, &M, &N, MPI_COMM_WORLD);
 
     int localM = BLOCK_SIZE(rank, np, M);
     // +2 for row before and after block

@@ -57,9 +57,6 @@ void readRowMajorMatrix(char* fileName, char** array, int* M, int* N,
         fread(N, sizeof(int), 1, inFile);
     }
 
-    MPI_Bcast(M, 1, MPI_INT, np - 1, comm);
-    MPI_Bcast(N, 1, MPI_INT, np - 1, comm);
-
     int chunkSize = BLOCK_SIZE(rank, np, *M) * (*N);
     // +2N to store a row before and a row after the block
     *array = malloc((chunkSize + 2 * (*N)) * sizeof(char));
@@ -70,17 +67,8 @@ void readRowMajorMatrix(char* fileName, char** array, int* M, int* N,
     }
     // +*N to reserve an empty row
     char* blockStart = *array + *N;
-    if (rank == np - 1) {
-        for (int i = 0; i < np - 1; ++i) {
-            int otherChunkSize = BLOCK_SIZE(i, np, *M) * (*N);
-            fread(blockStart, sizeof(char), otherChunkSize, inFile);
-            MPI_Send(blockStart, otherChunkSize, MPI_CHAR, i, 0, comm);
-        }
-        fread(blockStart, sizeof(char), chunkSize, inFile);
-        fclose(inFile);
-    } else {
-        MPI_Recv(blockStart, chunkSize, MPI_CHAR, np - 1, 0, comm, &status);
-    }
+    fread(blockStart, sizeof(char), chunkSize, inFile);
+    fclose(inFile);
 }
 
 char** reshapeTo2D(char* array, int M, int N) {
@@ -101,6 +89,13 @@ int main(int argc, char* argv[]) {
     int np, rank;
     MPI_Comm_size(MPI_COMM_WORLD, &np);
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+    if (np != 1) {
+        printf("Too many processes\n");
+        fflush(stdout);
+        MPI_Finalize();
+        return 1;
+    }
     MPI_Barrier(MPI_COMM_WORLD);
     double elapsed_time_io = -MPI_Wtime();
 
@@ -121,22 +116,6 @@ int main(int argc, char* argv[]) {
     double elapsed_time_update = -MPI_Wtime();
     MPI_Status status;
     for (int i = 0; i < ITERATIONS; ++i) {
-        if (rank - 1 >= 0) {
-            // p send first row to p-1
-            MPI_Send(array[1], N, MPI_CHAR, rank - 1, 0, MPI_COMM_WORLD);
-        }
-        if (rank + 1 < np) {
-            // p recv first row from p+1
-            MPI_Recv(array[localM + 1], N, MPI_CHAR, rank + 1, 0,
-                     MPI_COMM_WORLD, &status);
-            // p send last row to p+1
-            MPI_Send(array[localM], N, MPI_CHAR, rank + 1, 0, MPI_COMM_WORLD);
-        }
-        if (rank - 1 >= 0) {
-            // p recv last row from p-1
-            MPI_Recv(array[0], N, MPI_CHAR, rank - 1, 0, MPI_COMM_WORLD,
-                     &status);
-        }
         // calculate new state of each cell
         for (int r = 1; r <= localM; ++r) {
             int liveCount = (array[r - 1][0] + array[r - 1][1] + array[r][0] +
@@ -163,27 +142,11 @@ int main(int argc, char* argv[]) {
             }
         }
         if ((i + 1) % PRINT_CYCLE == 0) {
-            if (rank != 0) {
-                MPI_Send(array[1], localM * N, MPI_CHAR, 0, 1, MPI_COMM_WORLD);
-            } else {
-                for (int j = 1; j <= localM; ++j) {
-                    fwrite(array[j], 1, N, stdout);
-                    putchar('\n');
-                }
-                for (int i = 1; i < np; ++i) {
-                    int localM = BLOCK_SIZE(i, np, M);
-                    MPI_Recv(recvBuffer, localM * N, MPI_CHAR, i, 1,
-                             MPI_COMM_WORLD, &status);
-                    char* temp = recvBuffer;
-                    for (int j = 0; j < localM; ++j) {
-                        fwrite(temp, 1, N, stdout);
-                        putchar('\n');
-                        temp += N;
-                    }
-                }
+            for (int j = 1; j <= localM; ++j) {
+                fwrite(array[j], 1, N, stdout);
                 putchar('\n');
-                fflush(stdout);
             }
+            fflush(stdout);
         }
     }
     elapsed_time_update += MPI_Wtime();

@@ -59,26 +59,29 @@ int main(int argc, char* argv[]) {
 
     dtype *flattenMatrix = NULL, *vector = NULL;
     int M, N, vecSize;
+    // Read matrix from file and split into blocks
+    readCheckerboardMatrix(argv[1], &flattenMatrix, &M, &N, commGrid);
+
     // Split vector into blocks and send to subgrids on the first row
     if (coords[0] == 0) {
         readBlockVector(argv[2], &vector, &vecSize, commRow);
     }
     // Broadcast vector size and vector from first block of each column
     MPI_Bcast(&vecSize, 1, MPI_INT, 0, commCol);
-    int blockSize = BLOCK_SIZE(coords[1], shape[1], vecSize);
-    if (coords[0] != 0) {
-        vector = safeMalloc(rank, blockSize * sizeof(dtype));
-    }
-    MPI_Bcast(vector, blockSize, DTYPE, 0, commCol);
-
-    // Read matrix from file and split into blocks
-    readCheckerboardMatrix(argv[1], &flattenMatrix, &M, &N, commGrid);
     if (N != vecSize) {
         fprintf(stderr,
                 "The matrix cannot be multiplied with the given vector\n");
         MPI_Abort(MPI_COMM_WORLD, EINVAL);
         return 1;
     }
+
+    MPI_Barrier(MPI_COMM_WORLD);
+    double elapsedTime = -MPI_Wtime();
+    int blockSize = BLOCK_SIZE(coords[1], shape[1], vecSize);
+    if (coords[0] != 0) {
+        vector = safeMalloc(rank, blockSize * sizeof(dtype));
+    }
+    MPI_Bcast(vector, blockSize, DTYPE, 0, commCol);
 
     // Multiply each block
     int blockM = BLOCK_SIZE(coords[0], shape[0], M);
@@ -102,7 +105,17 @@ int main(int argc, char* argv[]) {
     if (coords[1] == 0) {
         writeBlockVector(stdout, product, blockM, commCol);
     }
+    MPI_Barrier(MPI_COMM_WORLD);
+    elapsedTime += MPI_Wtime();
 
+    double maxElapsedTime;
+    MPI_Reduce(&elapsedTime, &maxElapsedTime, 1, MPI_DOUBLE, MPI_MAX, 0,
+               MPI_COMM_WORLD);
+    if (rank == 0) {
+        printf("\nNumber of process=%d, Time elapsed=%.6f sec(s)\n", size,
+               maxElapsedTime);
+        fflush(stdout);
+    }
     if (coords[1] == 0) {
         free(product);
         product = NULL;
@@ -258,24 +271,21 @@ void writeBlockVector(FILE* stream, dtype* array, int len, MPI_Comm comm) {
     MPI_Comm_size(comm, &size);
 
     int printSignal = 0;
-    if (rank == 0) {
-        writeArray(stream, array, len);
-        fflush(stream);
-        if (rank + 1 < size) {
-            MPI_Send(&printSignal, 1, MPI_INT, rank + 1, 0, comm);
-        }
-    } else {
+    if (rank != 0) {
         MPI_Recv(&printSignal, 1, MPI_INT, rank - 1, 0, comm,
                  MPI_STATUS_IGNORE);
-        fprintf(stream, ", ");
-        writeArray(stream, array, len);
-        fflush(stream);
-        if (rank + 1 < size) {
-            MPI_Send(&printSignal, 1, MPI_INT, rank + 1, 0, comm);
-        } else {
-            fputc('\n', stream);
+    }
+    writeArray(stream, array, len);
+    fflush(stream);
+    if (rank + 1 < size) {
+        if (len > 0) {
+            fprintf(stream, ", ");
             fflush(stream);
         }
+        MPI_Send(&printSignal, 1, MPI_INT, rank + 1, 0, comm);
+    } else {
+        fputc('\n', stream);
+        fflush(stream);
     }
 }
 
